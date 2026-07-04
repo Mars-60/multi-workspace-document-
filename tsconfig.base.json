@@ -9,7 +9,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "allowJs": false,
-    "noEmit": true,
+    "noEmit": false,
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["packages/shared/src/*"],
