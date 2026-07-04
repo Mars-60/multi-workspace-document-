@@ -1,0 +1,50 @@
+{
+  "name": "multi-workspace-document-assistant",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/web",
+    "dev:server": "npm run dev --workspace apps/server",
+    "build": "npm run build --workspace apps/web && npm run build --workspace apps/server",
+    "lint": "npm run lint --workspace apps/web && npm run lint --workspace apps/server",
+    "typecheck": "npm run typecheck --workspace apps/web && npm run typecheck --workspace apps/server",
+    "test": "node --test --import tsx --test-reporter spec \"tests/**/*.test.ts\"",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^24.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^10.0.0",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-react": "^7.37.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "husky": "^9.1.0",
+    "lint-staged": "^15.0.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.8.3"
+  },
+  "lint-staged": {
+    "**/*.{ts,tsx,js,jsx,json,md}": [
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.110.0",
+    "cookie-parser": "^1.4.7",
+    "express-rate-limit": "^8.5.2",
+    "mammoth": "^1.12.0",
+    "multer": "^2.2.0",
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.4.3"
+  }
+}
