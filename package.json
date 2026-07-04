@@ -14,7 +14,7 @@
     "lint": "npm run lint --workspace apps/web && npm run lint --workspace apps/server",
     "typecheck": "npm run typecheck --workspace apps/web && npm run typecheck --workspace apps/server",
     "test": "node --test --import tsx --test-reporter spec \"tests/**/*.test.ts\"",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
@@ -27,7 +27,7 @@
     "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-react": "^7.37.0",
     "eslint-plugin-react-hooks": "^5.0.0",
-    "husky": "^9.1.0",
+    "husky": "^9.1.7",
     "lint-staged": "^15.0.0",
     "prettier": "^3.3.3",
     "typescript": "^5.8.3"
