@@ -28,7 +28,7 @@ const databaseUrlSchema = z
 const productionSecretSchema = z
   .string()
   .refine((value) => Buffer.byteLength(value, 'utf8') >= 32, {
-    message: 'BETTER_AUTH_SECRET must be at least 32 bytes',
+    message: 'JWT_SECRET must be at least 32 bytes',
   });
 
 function parseRequiredInProduction<T>(
@@ -95,17 +95,11 @@ const env = {
     databaseUrlSchema,
     'postgresql://postgres:postgres@localhost:5432/mwda',
   ),
-  BETTER_AUTH_SECRET: parseRequiredInProduction(
-    'BETTER_AUTH_SECRET',
-    process.env.BETTER_AUTH_SECRET,
+  JWT_SECRET: parseRequiredInProduction(
+    'JWT_SECRET',
+    process.env.JWT_SECRET,
     productionSecretSchema,
     'dev-secret-with-at-least-32-bytes',
-  ),
-  BETTER_AUTH_URL: parseRequiredInProduction(
-    'BETTER_AUTH_URL',
-    process.env.BETTER_AUTH_URL,
-    urlSchema,
-    'http://localhost:4000',
   ),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])

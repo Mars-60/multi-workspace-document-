@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
 
+import { useAuth } from './auth/AuthContext';
+import { API_BASE, requestJson } from './lib/auth';
+
 type WorkspaceSummary = { id: string; name: string; slug: string; role: string; createdAt: string };
 type DocumentSummary = {
   id: string;
@@ -39,39 +42,7 @@ type RetrievedChunk = {
   content: string;
 };
 
-function getApiBase() {
-  const configured = import.meta.env.VITE_API_URL;
-  if (configured) {
-    return configured.replace(/\/+$/, '');
-  }
-  if (import.meta.env.PROD) {
-    throw new Error('Missing required frontend environment variable: VITE_API_URL');
-  }
-  return 'http://localhost:4000';
-}
-
-const API_BASE = getApiBase();
-
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  if (
-    !(init?.body instanceof FormData) &&
-    init?.method &&
-    ['POST', 'PUT', 'PATCH'].includes(init.method)
-  ) {
-    if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  }
-  const response = await globalThis.fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers,
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || 'Request failed');
-  }
-  return payload as T;
-}
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ─── Markdown renderer (simple) ───────────────────────────────────────────────
 function renderMarkdown(text: string): React.ReactElement {
@@ -177,10 +148,10 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 }
 
 function Home() {
+  const { user, loading, login, logout, register } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [userEmail, setUserEmail] = useState('');
   const [workspaceName, setWorkspaceName] = useState('');
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
@@ -257,23 +228,24 @@ function Home() {
     setMessages(payload.data.messages);
   }, []);
 
-  const refreshSession = useCallback(async () => {
-    try {
-      const payload = await requestJson<{ success: boolean; data: { user: { email: string } } }>(
-        '/api/auth/session',
-      );
-      setUserEmail(payload.data.user.email);
-      await loadWorkspaces();
-      setStatus('Dashboard ready.');
-    } catch {
-      setUserEmail('');
-      setWorkspaces([]);
-    }
-  }, [loadWorkspaces]);
-
   useEffect(() => {
-    void refreshSession();
-  }, [refreshSession]);
+    if (loading) return;
+    if (!user) {
+      setWorkspaces([]);
+      setDocuments([]);
+      setSessions([]);
+      setMessages([]);
+      setSelectedWorkspaceId('');
+      setSelectedSessionId('');
+      return;
+    }
+
+    void loadWorkspaces()
+      .then(() => setStatus('Dashboard ready.'))
+      .catch((error) =>
+        setStatus(error instanceof Error ? error.message : 'Unable to load workspaces'),
+      );
+  }, [loadWorkspaces, loading, user]);
 
   useEffect(() => {
     if (selectedWorkspaceId) {
@@ -289,15 +261,32 @@ function Home() {
     }
   }, [loadSessionMessages, selectedSessionId, selectedWorkspaceId]);
 
-  const authAction = async (mode: 'sign-in' | 'sign-up') => {
+  const authAction = async (mode: 'login' | 'register') => {
+    const trimmedEmail = email.trim();
+    const trimmedName = name.trim();
+
+    if (!EMAIL_PATTERN.test(trimmedEmail)) {
+      setStatus('Enter a valid email address.');
+      return;
+    }
+
+    if (mode === 'register' && !trimmedName) {
+      setStatus('Name is required.');
+      return;
+    }
+
+    if (mode === 'register' && password.length < 8) {
+      setStatus('Password must be at least 8 characters.');
+      return;
+    }
+
     setIsBusy(true);
     try {
-      await requestJson(`/api/auth/${mode}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name }),
-      });
-      await refreshSession();
+      if (mode === 'register') {
+        await register({ email: trimmedEmail, password, name: trimmedName });
+      } else {
+        await login({ email: trimmedEmail, password });
+      }
       setStatus('Signed in.');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Authentication failed');
@@ -307,8 +296,7 @@ function Home() {
   };
 
   const signOut = async () => {
-    await requestJson('/api/auth/sign-out', { method: 'POST' });
-    setUserEmail('');
+    await logout();
     setWorkspaces([]);
     setDocuments([]);
     setSessions([]);
@@ -490,7 +478,15 @@ function Home() {
     await loadWorkspaceData(selectedWorkspaceId);
   };
 
-  if (!userEmail) {
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-slate-400">
+        Loading...
+      </main>
+    );
+  }
+
+  if (!user) {
     return (
       <main className="min-h-screen bg-slate-950 flex items-center justify-center p-6">
         <section className="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 p-8 shadow-2xl">
@@ -528,6 +524,7 @@ function Home() {
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
               placeholder="Email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -536,9 +533,11 @@ function Home() {
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
               placeholder="Password"
               type="password"
+              minLength={8}
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void authAction('sign-in')}
+              onKeyDown={(e) => e.key === 'Enter' && void authAction('login')}
             />
           </div>
           <div className="mt-5 flex gap-3">
@@ -546,7 +545,7 @@ function Home() {
               id="btn-sign-in"
               className="flex-1 rounded-lg bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-50 transition-colors"
               disabled={isBusy}
-              onClick={() => void authAction('sign-in')}
+              onClick={() => void authAction('login')}
             >
               Sign in
             </button>
@@ -554,7 +553,7 @@ function Home() {
               id="btn-sign-up"
               className="flex-1 rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-300 hover:border-slate-600 hover:text-white disabled:opacity-50 transition-colors"
               disabled={isBusy}
-              onClick={() => void authAction('sign-up')}
+              onClick={() => void authAction('register')}
             >
               Create account
             </button>
@@ -598,7 +597,7 @@ function Home() {
           <span className="font-semibold text-white text-sm">Document Assistant</span>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-slate-400">{userEmail}</span>
+          <span className="text-sm text-slate-400">{user.email}</span>
           <button
             id="btn-sign-out"
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:text-white hover:border-slate-600 transition-colors"

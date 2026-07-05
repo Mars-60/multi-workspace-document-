@@ -4,7 +4,7 @@ Production-oriented React + Vite and Express + TypeScript application for worksp
 
 ## Implemented features
 
-- Better Auth email/password auth with secure cookie session forwarding.
+- JWT email/password authentication with bcrypt, Prisma users, and HTTP-only cookies.
 - Protected workspace, document, chat, retrieval, task, and tool routes.
 - Workspace-scoped Prisma persistence for documents, chunks, chats, tasks, and tool logs.
 - PDF, DOCX, TXT, and Markdown ingestion with SHA256 duplicate detection.
@@ -64,10 +64,9 @@ Backend variables:
 | --------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
 | `NODE_ENV`                  | Yes                    | Runtime mode. Use `production` on Render.                                                        |
 | `PORT`                      | Yes                    | HTTP port. Render injects this automatically; local default is `4000`.                           |
-| `CLIENT_URL`                | Yes                    | Public frontend origin for CORS, Better Auth trusted origins, and credentialed requests.         |
-| `DATABASE_URL`              | Yes                    | PostgreSQL connection string used by Prisma and Better Auth.                                     |
-| `BETTER_AUTH_SECRET`        | Yes                    | Better Auth signing secret. Must be at least 32 bytes.                                           |
-| `BETTER_AUTH_URL`           | Yes                    | Public backend base URL, for example the Render service URL.                                     |
+| `CLIENT_URL`                | Yes                    | Public frontend origin for CORS and credentialed cookie requests.                                |
+| `DATABASE_URL`              | Yes                    | PostgreSQL connection string used by Prisma.                                                     |
+| `JWT_SECRET`                | Yes                    | JWT signing secret for auth cookies. Must be at least 32 bytes.                                  |
 | `LOG_LEVEL`                 | No                     | Pino log level. Defaults to `info`.                                                              |
 | `SUPABASE_URL`              | Yes                    | Supabase project URL only, for example `https://project.supabase.co`; do not include `/rest/v1`. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes                    | Backend-only key for Supabase Storage writes and signed URLs. Never expose to Vercel.            |
@@ -84,7 +83,27 @@ Frontend variables:
 | -------------- | ---------------------- | --------------------------------------------- |
 | `VITE_API_URL` | Yes                    | Public backend URL used by the Vite frontend. |
 
-The frontend intentionally uses no Supabase or Better Auth secrets.
+The frontend intentionally uses no Supabase, database, or JWT secrets.
+
+### Supabase Postgres on Render
+
+For Render, set `DATABASE_URL` to the Supabase **Session Pooler** connection string on port `5432`.
+
+Use:
+
+```text
+postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+```
+
+Do not use the Supabase Direct Connection string from Render; it resolves to IPv6-only networking that Render cannot reach and can fail with `ENETUNREACH`. Do not use the Transaction Pooler on port `6543` for this server, because Prisma expects session-compatible Postgres behavior for migrations and normal queries.
+
+After resetting the Supabase database password, copy the full connection string immediately from Supabase. The displayed password is single-use-display; do not reconstruct the URL from memory.
+
+Before deploying, verify the exact URL locally:
+
+```bash
+npm run test:db --workspace apps/server
+```
 
 ## Deployment
 

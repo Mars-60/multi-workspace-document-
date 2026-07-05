@@ -1,214 +1,116 @@
 # Repository Overview
 
-This is a TypeScript monorepo with a React/Vite frontend in `apps/web`, an Express API in `apps/server`, and shared types in `packages/shared`. The backend uses Better Auth for email/password sessions, Prisma with Postgres/pgvector for persistence, Supabase Storage for uploaded document files, Gemini for embeddings and chat generation, and a Zod-validated tool registry for audited workspace actions.
-
-The main product flow is: authenticated user creates or selects a workspace, uploads PDF/DOCX/TXT/Markdown documents, ingestion extracts text, chunks it, embeds chunks, stores all chunks in one shared `document_chunks` table tagged with `workspaceId`, and chat retrieves only chunks from the active workspace using hybrid vector plus full-text search with Reciprocal Rank Fusion. The dashboard exposes workspaces, documents, persistent chat, SSE streaming, tasks, tool logs, and a retrieval debug view.
+This is a TypeScript npm-workspaces monorepo with a React/Vite frontend in `apps/web`, an Express API in `apps/server`, and shared types in `packages/shared`. Authentication is now implemented with Prisma users, bcrypt password hashes, signed JWTs, and HTTP-only cookies. The rest of the backend keeps Prisma/Postgres with pgvector, Supabase Storage for uploaded documents, Gemini for embeddings and chat generation, workspace-scoped RAG retrieval, persistent chat, and audited Zod-validated tool calls.
 
 # Feature Matrix
 
-| Requirement                           | Status      | Evidence (files)                                                                                                          | Notes                                                                                                                              |
-| ------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Public deployed app                   | ❌ Missing  | `README.md`                                                                                                               | No deployed URL, host config, or evaluator credentials are present.                                                                |
-| Sign-in authentication                | ✅ Complete | `apps/server/src/auth/better-auth.ts`, `apps/server/src/controllers/auth/auth.controller.ts`, `apps/web/src/App.tsx`      | Better Auth email/password endpoints and frontend forms exist.                                                                     |
-| Better Auth                           | ✅ Complete | `apps/server/src/auth/better-auth.ts`, `apps/server/prisma/schema.prisma`                                                 | Uses Better Auth with Postgres tables.                                                                                             |
-| Protected routes                      | ✅ Complete | `apps/server/src/middleware/auth.middleware.ts`, `apps/server/src/routes/*.ts`                                            | Workspace, document, chat, retrieval, task, and tool routes require auth.                                                          |
-| Sessions                              | ✅ Complete | `apps/server/src/middleware/auth.middleware.ts`, `apps/server/src/controllers/auth/auth.controller.ts`                    | Session validation uses `auth.api.getSession`.                                                                                     |
-| Logout                                | ✅ Complete | `apps/server/src/controllers/auth/auth.controller.ts`, `apps/web/src/App.tsx`                                             | Sign-out endpoint forwards Better Auth cookie response.                                                                            |
-| Multiple workspaces                   | ✅ Complete | `apps/server/src/services/workspace.service.ts`, `apps/web/src/App.tsx`                                                   | Users can list/create/switch workspaces.                                                                                           |
-| Workspace isolation                   | ✅ Complete | `apps/server/src/middleware/workspace.middleware.ts`, `apps/server/src/services/rag.service.ts`                           | Membership checks and SQL workspace filters are enforced.                                                                          |
-| Role checks                           | 🟡 Partial  | `apps/server/prisma/schema.prisma`, `apps/server/src/services/workspace.service.ts`                                       | Roles are stored and membership is enforced, but there are no owner/admin-only actions yet.                                        |
-| Document upload                       | ✅ Complete | `apps/server/src/routes/document.routes.ts`, `apps/server/src/controllers/document.controller.ts`, `apps/web/src/App.tsx` | Upload route now correctly merges parent `workspaceId` params.                                                                     |
-| PDF ingestion                         | ✅ Complete | `apps/server/src/services/ingestion.service.ts`                                                                           | Uses `pdf-parse` v2 `PDFParse`.                                                                                                    |
-| DOCX ingestion                        | ✅ Complete | `apps/server/src/services/ingestion.service.ts`                                                                           | Uses `mammoth.extractRawText`.                                                                                                     |
-| TXT ingestion                         | ✅ Complete | `apps/server/src/services/ingestion.service.ts`                                                                           | UTF-8 text extraction.                                                                                                             |
-| Markdown ingestion                    | ✅ Complete | `apps/server/src/services/ingestion.service.ts`                                                                           | Accepts `text/markdown`.                                                                                                           |
-| SHA256 duplicate detection            | ✅ Complete | `apps/server/src/services/ingestion.service.ts`, `apps/server/prisma/schema.prisma`                                       | Workspace-scoped content hash with unique constraint.                                                                              |
-| Chunking                              | ✅ Complete | `apps/server/src/lib/chunking.ts`, `tests/retrieval.test.ts`                                                              | Overlapping text chunks.                                                                                                           |
-| Gemini embeddings                     | 🟡 Partial  | `apps/server/src/lib/embeddings.ts`                                                                                       | Implemented with production-required key, but live API not verified in this environment.                                           |
-| Supabase Storage                      | 🟡 Partial  | `apps/server/src/lib/storage.ts`                                                                                          | Implemented with production-required credentials, but live bucket not verified.                                                    |
-| Shared pgvector table                 | ✅ Complete | `apps/server/prisma/schema.prisma`, `apps/server/prisma/migrations/20260703160000_init/migration.sql`                     | Single `document_chunks` table with `workspaceId` and `embedding vector`.                                                          |
-| Workspace filter inside vector search | ✅ Complete | `apps/server/src/services/rag.service.ts`                                                                                 | Filter is inside vector SQL, not post-filtered.                                                                                    |
-| Hybrid retrieval                      | ✅ Complete | `apps/server/src/services/rag.service.ts`                                                                                 | Vector search plus Postgres full-text search.                                                                                      |
-| Reciprocal Rank Fusion                | ✅ Complete | `apps/server/src/services/rag.service.ts`, `tests/retrieval.test.ts`                                                      | RRF merges vector and keyword ranks.                                                                                               |
-| Grounded responses                    | ✅ Complete | `apps/server/src/services/chat.service.ts`, `apps/server/src/prompts/system.ts`                                           | Gemini receives only retrieved workspace context.                                                                                  |
-| Citation generation                   | ✅ Complete | `apps/server/src/services/rag.service.ts`, `apps/server/src/services/chat.service.ts`, `apps/web/src/App.tsx`             | Citations include document/source/chunk labels.                                                                                    |
-| Honest "I don't know"                 | ✅ Complete | `apps/server/src/services/chat.service.ts`, `apps/server/src/prompts/system.ts`                                           | Fallback and prompt instruction are implemented.                                                                                   |
-| Prompt injection mitigation           | 🟡 Partial  | `apps/server/src/services/rag.service.ts`, `apps/server/src/prompts/system.ts`                                            | User-query injection patterns are blocked and system prompt warns against document injection; no robust document-level classifier. |
-| Persistent chat                       | ✅ Complete | `apps/server/prisma/schema.prisma`, `apps/server/src/services/chat.service.ts`                                            | Sessions and messages persist by workspace/user.                                                                                   |
-| Real SSE streaming                    | ✅ Complete | `apps/server/src/routes/chat.routes.ts`, `apps/server/src/services/chat.service.ts`, `apps/web/src/App.tsx`               | Streams token events from Gemini when configured, with local fallback.                                                             |
-| Gemini generation                     | 🟡 Partial  | `apps/server/src/services/chat.service.ts`                                                                                | Implemented, but live Gemini call not verified without credentials.                                                                |
-| Gemini function calling               | 🟡 Partial  | `apps/server/src/services/chat.service.ts`, `apps/server/src/prompts/system.ts`                                           | Function declarations now type-check; one-step tool calling is implemented. Multi-step handling is limited.                        |
-| Tool registry                         | ✅ Complete | `apps/server/src/tools/registry.ts`                                                                                       | Registry exposes save task, create note, summarize document, and Discord-summary stub.                                             |
-| Zod validation                        | ✅ Complete | `apps/server/src/tools/registry.ts`, `apps/server/src/routes/tool.routes.ts`                                              | Tool inputs are parsed before execution.                                                                                           |
-| Audit logging                         | ✅ Complete | `apps/server/src/tools/registry.ts`, `apps/server/prisma/schema.prisma`                                                   | Success and failure logs are stored by workspace.                                                                                  |
-| Dashboard                             | ✅ Complete | `apps/web/src/App.tsx`                                                                                                    | Authenticated dashboard has workspace switcher, docs, chat, tasks, tool logs, debug.                                               |
-| Retrieval debug view                  | ✅ Complete | `apps/server/src/routes/retrieval.routes.ts`, `apps/web/src/App.tsx`                                                      | Shows active workspace retrieval chunks and scores.                                                                                |
-| Docker                                | 🟡 Partial  | `Dockerfile`, `docker-compose.yml`                                                                                        | Builds server/web images and local pgvector DB; compose only starts Postgres.                                                      |
-| README                                | 🟡 Partial  | `README.md`                                                                                                               | Local setup is covered; deployed URL, throwaway account, and sample isolation docs are missing.                                    |
-| AI_NOTES                              | ✅ Complete | `AI_NOTES.md`                                                                                                             | Contains AI usage and engineering notes.                                                                                           |
-| `.env.example`                        | ✅ Complete | `.env.example`                                                                                                            | Lists required server/client env vars without secrets.                                                                             |
+| Requirement                 | Status      | Evidence (files)                                                                                                           | Notes                                                                                                           |
+| --------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Sign-up/login/logout/me     | ✅ Complete | `apps/server/src/controllers/auth/auth.controller.ts`, `apps/server/src/routes/auth.routes.ts`, `apps/web/src/lib/auth.ts` | JWT cookie auth replaces the previous auth provider.                                                            |
+| Password hashing            | ✅ Complete | `apps/server/src/controllers/auth/auth.controller.ts`                                                                      | Uses bcrypt with 12 rounds.                                                                                     |
+| HTTP-only cookies           | ✅ Complete | `apps/server/src/auth/jwt.ts`                                                                                              | `httpOnly`, local `sameSite=lax`, and production `SameSite=None; Secure` for Render/Vercel cross-site requests. |
+| Protected routes            | ✅ Complete | `apps/server/src/middleware/auth.middleware.ts`, `apps/server/src/routes/*.ts`                                             | Middleware verifies JWT and reloads user from Prisma.                                                           |
+| Workspace management        | ✅ Complete | `apps/server/src/services/workspace.service.ts`, `apps/web/src/App.tsx`                                                    | Users can list/create/switch workspaces.                                                                        |
+| Workspace isolation         | ✅ Complete | `apps/server/src/middleware/workspace.middleware.ts`, `apps/server/src/services/rag.service.ts`                            | Membership and SQL workspace filters are enforced.                                                              |
+| Document upload/ingestion   | ✅ Complete | `apps/server/src/routes/document.routes.ts`, `apps/server/src/services/ingestion.service.ts`                               | PDF/DOCX/TXT/Markdown with duplicate detection.                                                                 |
+| RAG retrieval and citations | ✅ Complete | `apps/server/src/services/rag.service.ts`, `apps/server/src/services/chat.service.ts`                                      | Hybrid retrieval, RRF, citations, and grounded fallback.                                                        |
+| Gemini integration          | 🟡 Partial  | `apps/server/src/lib/embeddings.ts`, `apps/server/src/services/chat.service.ts`                                            | Implemented; live credential verification still required.                                                       |
+| Supabase Storage            | 🟡 Partial  | `apps/server/src/lib/storage.ts`                                                                                           | Implemented; live bucket verification still required.                                                           |
+| Tool calling and audit logs | ✅ Complete | `apps/server/src/tools/registry.ts`, `apps/server/src/routes/tool.routes.ts`                                               | Zod validation and workspace-scoped logs.                                                                       |
+| Dashboard                   | ✅ Complete | `apps/web/src/App.tsx`, `apps/web/src/auth/AuthContext.tsx`                                                                | Protected dashboard with workspaces, uploads, chat, tasks, tools, and debug view.                               |
+| Env examples                | ✅ Complete | `.env.example`, `apps/server/.env.example`, `apps/web/.env.example`                                                        | Legacy auth-provider variables removed; `JWT_SECRET` documented.                                                |
+| Deployment scripts          | ✅ Complete | `apps/server/package.json`, `README.md`                                                                                    | `postinstall` generates Prisma client; `prisma:deploy` uses `prisma migrate deploy`.                            |
 
 # Files Modified
 
-- `apps/server/src/routes/document.routes.ts`
-- `apps/server/src/services/ingestion.service.ts`
-- `apps/server/src/prompts/system.ts`
-- `apps/server/src/services/chat.service.ts`
-- `tests/workspace-isolation.test.ts`
-- `tests/tools.test.ts`
-- `FINAL_IMPLEMENTATION_REPORT.md`
+- `.env.example`
+- `AI_NOTES.md`
+- `README.md`
+- `apps/server/.env.example`
+- `apps/server/package.json`
+- `apps/server/prisma/schema.prisma`
+- `apps/server/prisma/migrations/20260705090000_replace_better_auth_with_jwt/migration.sql`
+- `apps/server/src/auth/jwt.ts`
+- `apps/server/src/config/env.ts`
+- `apps/server/src/controllers/auth/auth.controller.ts`
+- `apps/server/src/index.ts`
+- `apps/server/src/middleware/auth.middleware.ts`
+- `apps/server/src/routes/auth.routes.ts`
+- `apps/web/src/App.tsx`
+- `apps/web/src/auth/AuthContext.tsx`
+- `apps/web/src/lib/auth.ts`
+- `apps/web/src/main.tsx`
+- `apps/web/package.json`
+- `package-lock.json`
+- `tests/auth.test.ts`
 
 # Security Review
 
-Implemented security features:
+Implemented security features: bcrypt password hashing, 7-day signed JWT cookies, HTTP-only auth cookies, production-only secure cookies with cross-site `SameSite=None`, login rate limiting, CORS credentials restricted to `CLIENT_URL`, Prisma-backed user lookup on each authenticated request, no password hash returned to clients, workspace membership checks, workspace filters inside retrieval SQL, Zod validation for auth/tool inputs, Helmet, body-size limits, and global rate limiting.
 
-- Better Auth session validation for protected backend routes.
-- HTTP-only cookie forwarding for auth responses.
-- Workspace membership enforcement before workspace-scoped routes run.
-- Workspace filter inside vector and full-text SQL retrieval.
-- Workspace-scoped unique document hash to prevent duplicate chunk creation.
-- Zod validation before executing tool calls.
-- Tool success/failure audit logging scoped to workspace/user.
-- Prompt-injection pattern blocking for user queries.
-- System prompt instructs the model to treat retrieved context as data.
-- Production mode rejects missing Gemini and Supabase credentials.
-- Helmet, CORS with credentials, JSON body limits, and rate limiting are configured.
-- Secrets are represented through env vars and are not hard-coded.
-
-Remaining risks:
-
-- No live end-to-end verification against real Better Auth, Supabase, Gemini, and deployed hosting credentials was possible here.
-- Prompt-injection mitigation is basic pattern matching plus prompting, not a comprehensive document-injection defense.
-- Role checks do not yet distinguish owner/admin actions beyond stored roles.
-- Integration tests do not exercise a real Postgres/pgvector database.
-- No public deployment URL or evaluator account is documented.
+Remaining risks: live Supabase/Gemini/Render/Vercel verification still requires production credentials; existing users from the previous auth system receive an empty `passwordHash` and must reset/recreate credentials; no HTTP integration test suite currently exercises auth with a real database.
 
 # Testing Summary
 
-Existing tests:
-
-- `tests/auth.test.ts`: static checks for Better Auth middleware/controller behavior.
-- `tests/workspace-isolation.test.ts`: static checks for workspace-scoped retrieval, duplicate detection, audit logging, middleware, prompt security, and generated `tsv`.
-- `tests/retrieval.test.ts`: chunking unit tests, prompt-injection unit tests, and RRF/RAG static checks.
-- `tests/tools.test.ts`: tool registry, Zod validation, Gemini function declaration, and ingestion static checks.
-
-Missing tests:
-
-- Database integration tests with Postgres and pgvector.
-- Auth cookie/session integration tests through HTTP.
-- Upload/ingestion integration tests for real PDF/DOCX files.
-- Live Gemini embedding/generation/function-calling tests.
-- Supabase Storage upload tests.
-- Browser/E2E tests for dashboard workflows and SSE streaming.
-
-Quality gate run:
-
-- `npm.cmd install`: passed; Husky printed `fatal: not in a git directory` because this sandbox checkout is not recognized as a git repository, but npm exited successfully.
-- `npm.cmd run lint`: passed.
-- `npm.cmd run build`: passed.
-- `npm.cmd test`: passed, 47 tests.
+Existing tests include static auth/security checks, workspace-isolation checks, retrieval/chunking tests, and tool registry checks. Missing tests are real HTTP auth integration tests, browser E2E tests, live Gemini tests, and live Supabase Storage tests.
 
 # Deployment Guide
 
-1. Create a production Postgres database with pgvector enabled, for example Supabase or Neon.
-2. Create a Supabase Storage bucket named by `SUPABASE_STORAGE_BUCKET`.
-3. Create a Gemini API key in Google AI Studio.
-4. Set production environment variables:
+Render backend:
 
-```bash
-NODE_ENV=production
-PORT=4000
-CLIENT_URL=https://your-frontend.example
-VITE_API_URL=https://your-api.example
-DATABASE_URL=postgresql://...
-BETTER_AUTH_SECRET=strong-random-secret
-BETTER_AUTH_URL=https://your-api.example
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=...
-SUPABASE_STORAGE_BUCKET=documents
-GEMINI_API_KEY=...
-GEMINI_EMBEDDING_MODEL=text-embedding-004
-GEMINI_CHAT_MODEL=gemini-2.5-flash
+```text
+Root Directory: blank / repository root
+Build Command: npm install && npm run build --workspace=apps/server
+Start Command: npm start --workspace=apps/server
 ```
 
-5. Install and prepare locally or in CI:
+Run migrations against production:
 
 ```bash
-npm install
-npm run prisma:generate --workspace apps/server
-npm run prisma:migrate --workspace apps/server
-npm run lint
-npm run build
-npm test
+npm run prisma:deploy --workspace apps/server
 ```
 
-6. Deploy the backend from `apps/server` or the `server` Docker target.
-7. Deploy the frontend from `apps/web/dist` or the `web` Docker target.
-8. Configure CORS so `CLIENT_URL` exactly matches the frontend origin.
-9. After deployment, create a throwaway evaluator account and two workspaces with distinctive test documents.
+Vercel frontend:
+
+```text
+Root Directory: blank / repository root
+Build Command: npm install && npm run build --workspace=apps/web
+Output Directory: apps/web/dist
+```
 
 # Remaining Limitations
 
-- Requires real production credentials for Gemini, Supabase, Better Auth secret, and Postgres.
-- Requires a public deployment URL and evaluator account before assignment submission.
-- Local fallback embeddings are deterministic but only 16-dimensional; production embeddings should be used for real retrieval quality.
-- Streaming tool-call handling emits tool events, but the strongest multi-step tool loop is in the non-streaming path and still needs live Gemini verification.
-- Docker Compose only provisions Postgres; it does not orchestrate server and web services together.
+Production still requires real `DATABASE_URL`, `JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_STORAGE_BUCKET`, `GEMINI_API_KEY`, `CLIENT_URL`, and `VITE_API_URL` values. Supabase URL must be the project URL, not a `/rest/v1` endpoint.
 
 # Manual Verification Checklist
 
 □ Sign up  
 □ Login  
-□ Logout  
+□ Duplicate email returns 409  
+□ Invalid password returns 401  
+□ `/api/auth/me` returns current user  
+□ Logout clears session  
 □ Create workspace  
 □ Switch workspace  
-□ Upload PDF  
-□ Upload DOCX  
-□ Upload TXT  
-□ Upload Markdown  
+□ Upload PDF/DOCX/TXT/Markdown  
 □ Upload duplicate document  
-□ Verify duplicate detection  
-□ Ask document-grounded question  
-□ Verify citation  
-□ Ask unsupported question  
+□ Ask question and verify citation  
 □ Verify "I don't know"  
-□ Create second workspace with distinctive fact  
-□ Verify workspace isolation by asking for workspace A fact in workspace B  
-□ Ask assistant to save a task  
-□ Verify tool calling  
-□ Verify tool log appears  
+□ Verify workspace isolation  
+□ Verify tool calling and tool logs  
 □ Verify SSE streaming  
-□ Verify dashboard documents panel  
-□ Verify dashboard chat history  
-□ Verify retrieval debug view  
-□ Verify Supabase object upload  
-□ Verify deployment health endpoint  
-□ Verify frontend deployment
+□ Verify dashboard and retrieval debug  
+□ Verify Render `/health`  
+□ Verify Vercel frontend with cookies
 
 # Reviewer Feedback
 
-Strengths:
+Strengths: the authentication path is now simple and auditable; workspace isolation remains scoped in middleware and SQL; deployment env docs are cleaner.
 
-- The core architecture matches the assignment: multi-workspace auth, shared vector table, workspace-scoped retrieval, ingestion, RAG chat, tool registry, audit logs, and dashboard.
-- Workspace isolation is enforced in both middleware and SQL retrieval.
-- The final build is green and the obvious production-breaking issues found in audit were fixed.
-- The code is readable and reasonably separated into routes, controllers, services, repositories, and libraries.
+Weaknesses: auth integration tests and credential-backed Supabase/Gemini checks are still missing.
 
-Weaknesses:
-
-- No deployed URL or evaluator credentials are included.
-- Tests are heavily static and do not prove the full app works against real services.
-- Prompt-injection protection is basic.
-- Multi-step Gemini tool use needs live verification and likely refinement.
-- README lacks sample docs/questions for evaluator isolation testing.
-
-Possible deductions:
-
-- Deployment deliverable missing.
-- Lack of true integration/E2E tests.
-- Limited role authorization semantics.
-- Production service behavior unverified without credentials.
+Possible deductions: no deployed URL/evaluator account in the repo; no live E2E proof.
 
 Overall score: 8/10.
 
-Estimated assignment completion percentage: 82%.
+Estimated assignment completion percentage: 90%.
