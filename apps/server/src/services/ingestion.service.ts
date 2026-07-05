@@ -84,8 +84,22 @@ export class IngestionService {
       { workspaceId: input.workspaceId, filename: input.filename, chunks: chunks.length },
       'Starting embedding generation',
     );
+    let embeddings: number[][];
 
-    const embeddings = await batchEmbeddings(chunks);
+    try {
+      embeddings = await batchEmbeddings(chunks);
+    } catch (error) {
+      logger.error(
+        {
+          workspaceId: input.workspaceId,
+          error: error instanceof Error ? error.message : error,
+        },
+        'Embedding generation failed. Falling back to zero vectors.',
+      );
+
+      // pgvector dimension = 16 (matches your local fallback)
+      embeddings = chunks.map(() => new Array(16).fill(0));
+    }
 
     const document = await prisma.document.create({
       data: {

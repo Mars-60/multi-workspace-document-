@@ -1,20 +1,25 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 
 import env from '../config/env.js';
 
-const apiKey = env.GEMINI_API_KEY;
-const client = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+const ai = new GoogleGenAI({
+  apiKey: env.GEMINI_API_KEY,
+});
 
-export async function embedText(text: string) {
-  if (!client) {
-    if (env.NODE_ENV !== 'production') {
-      const seed = Array.from(text).reduce((sum, char) => sum + char.charCodeAt(0), 0);
-      return Array.from({ length: 16 }, (_, index) => ((seed + index * 31) % 997) / 997);
-    }
-    throw new Error('Gemini API key is not configured');
+export async function embedText(text: string): Promise<number[]> {
+  if (!env.GEMINI_API_KEY) {
+    throw new Error('Missing Gemini API key');
   }
 
-  const model = client.getGenerativeModel({ model: env.GEMINI_EMBEDDING_MODEL });
-  const response = await model.embedContent(text);
-  return response.embedding.values;
+  const response = await ai.models.embedContent({
+    model: env.GEMINI_EMBEDDING_MODEL || 'text-embedding-004',
+    contents: text,
+  });
+
+  const embeddings = response.embeddings;
+  if (!embeddings || !embeddings[0] || !embeddings[0].values) {
+    throw new Error('Failed to generate embedding values from model response');
+  }
+
+  return embeddings[0].values;
 }

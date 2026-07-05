@@ -1,4 +1,4 @@
-import { SchemaType, type FunctionDeclaration } from '@google/generative-ai';
+import { Type, type FunctionDeclaration } from '@google/genai';
 
 /**
  * System prompt construction for grounded, citation-aware RAG responses.
@@ -14,7 +14,9 @@ export type ChunkContext = {
 export function buildSystemPrompt(chunks: ChunkContext[]): string {
   const contextBlock =
     chunks.length > 0
-      ? chunks.map((chunk, i) => `[${i + 1}] ${chunk.citation}\n${chunk.content}`).join('\n\n---\n\n')
+      ? chunks
+          .map((chunk, i) => `[${i + 1}] ${chunk.citation}\n${chunk.content}`)
+          .join('\n\n---\n\n')
       : 'No documents are available in this workspace.';
 
   return `You are a helpful document assistant for a multi-workspace knowledge management system.
@@ -47,10 +49,10 @@ export function buildToolSchema(): FunctionDeclaration[] {
       name: 'save_task',
       description: 'Persist a task or action item in the workspace.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          title: { type: SchemaType.STRING, description: 'Short task title (required)' },
-          description: { type: SchemaType.STRING, description: 'Optional task details' },
+          title: { type: Type.STRING, description: 'Short task title (required)' },
+          description: { type: Type.STRING, description: 'Optional task details' },
         },
         required: ['title'],
       },
@@ -59,10 +61,10 @@ export function buildToolSchema(): FunctionDeclaration[] {
       name: 'create_note',
       description: 'Create a workspace note.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          title: { type: SchemaType.STRING, description: 'Note title' },
-          body: { type: SchemaType.STRING, description: 'Note body content' },
+          title: { type: Type.STRING, description: 'Note title' },
+          body: { type: Type.STRING, description: 'Note body content' },
         },
         required: ['title', 'body'],
       },
@@ -71,9 +73,9 @@ export function buildToolSchema(): FunctionDeclaration[] {
       name: 'summarize_document',
       description: 'Summarize a specific document by its document ID.',
       parameters: {
-        type: SchemaType.OBJECT,
+        type: Type.OBJECT,
         properties: {
-          documentId: { type: SchemaType.STRING, description: 'The document ID to summarize' },
+          documentId: { type: Type.STRING, description: 'The document ID to summarize' },
         },
         required: ['documentId'],
       },
