@@ -7,4 +7,5 @@ coverage/
 .vite/
 .DS_Store
 *.log
+*.tsbuildinfo
 prisma/generated/
