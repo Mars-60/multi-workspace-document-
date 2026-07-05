@@ -15,8 +15,8 @@
     "prisma:deploy": "prisma migrate deploy"
   },
   "dependencies": {
-    "@mwda/shared": "file:../../packages/shared",
     "@google/generative-ai": "^0.24.1",
+    "@mwda/shared": "file:../../packages/shared",
     "@prisma/client": "^6.1.0",
     "@supabase/supabase-js": "^2.110.0",
     "better-auth": "^1.2.4",
@@ -29,6 +29,7 @@
     "mammoth": "^1.12.0",
     "multer": "^2.2.0",
     "pdf-parse": "^2.4.5",
+    "pg": "^8.22.0",
     "pino": "^9.1.0",
     "pino-http": "^10.0.0",
     "prisma": "^6.1.0",
@@ -39,6 +40,7 @@
     "@types/cors": "^2.8.0",
     "@types/express": "^5.0.0",
     "@types/multer": "^2.2.0",
+    "@types/pg": "^8.20.0",
     "tsx": "^4.20.0",
     "typescript": "^5.8.3"
   }

@@ -11,6 +11,13 @@ import { requestIdMiddleware, sanitizeInput } from './middleware/security.middle
 import { createLogger } from './lib/logger.js';
 import { createAppRouter } from './routes/index.js';
 
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION:', reason);
+  if (reason instanceof Error && (reason as any).cause) {
+    console.error('CAUSE:', (reason as any).cause);
+  }
+});
+
 const logger = createLogger('server');
 
 const app = express();
