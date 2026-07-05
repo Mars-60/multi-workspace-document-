@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import type { Prisma } from '@prisma/client';
 import mammoth from 'mammoth';
 import { PDFParse } from 'pdf-parse';
 
@@ -62,7 +63,10 @@ export class IngestionService {
     });
 
     if (existing) {
-      logger.info({ workspaceId: input.workspaceId, documentId: existing.id }, 'Duplicate document detected');
+      logger.info(
+        { workspaceId: input.workspaceId, documentId: existing.id },
+        'Duplicate document detected',
+      );
       return { duplicate: true, document: existing };
     }
 
@@ -76,7 +80,10 @@ export class IngestionService {
     }
 
     const chunks = chunkText(text);
-    logger.info({ workspaceId: input.workspaceId, filename: input.filename, chunks: chunks.length }, 'Starting embedding generation');
+    logger.info(
+      { workspaceId: input.workspaceId, filename: input.filename, chunks: chunks.length },
+      'Starting embedding generation',
+    );
 
     const embeddings = await batchEmbeddings(chunks);
 
@@ -93,7 +100,7 @@ export class IngestionService {
       },
     });
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       for (const [index, chunk] of chunks.entries()) {
         const chunkId = `${document.id}-${index}`;
         await tx.$executeRawUnsafe(
@@ -109,7 +116,10 @@ export class IngestionService {
       }
     });
 
-    logger.info({ workspaceId: input.workspaceId, documentId: document.id, chunks: chunks.length }, 'Document ingested successfully');
+    logger.info(
+      { workspaceId: input.workspaceId, documentId: document.id, chunks: chunks.length },
+      'Document ingested successfully',
+    );
 
     return { duplicate: false, document };
   }
@@ -121,8 +131,13 @@ export class IngestionService {
         const parsed = await pdf.getText();
         return parsed.text;
       } catch (error) {
-        logger.error({ filename, error: error instanceof Error ? error.message : error }, 'PDF parse failed');
-        throw new Error(`Failed to parse PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        logger.error(
+          { filename, error: error instanceof Error ? error.message : error },
+          'PDF parse failed',
+        );
+        throw new Error(
+          `Failed to parse PDF: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        );
       }
     }
 

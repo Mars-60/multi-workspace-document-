@@ -36,9 +36,14 @@ export class DocumentRepository {
     });
   }
 
-  async updateStatus(id: string, status: 'UPLOADING' | 'PROCESSING' | 'READY' | 'FAILED', textLength?: number) {
+  async updateStatus(
+    workspaceId: string,
+    id: string,
+    status: 'UPLOADING' | 'PROCESSING' | 'READY' | 'FAILED',
+    textLength?: number,
+  ) {
     return prisma.document.update({
-      where: { id },
+      where: { id, workspaceId },
       data: {
         status,
         textLength: textLength ?? undefined,

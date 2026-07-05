@@ -1,9 +1,15 @@
 import { DocumentRepository } from '../repositories/document.repository.js';
+import { createSignedStorageUrl } from '../lib/storage.js';
 
 import { IngestionService } from './ingestion.service.js';
 import { WorkspaceService } from './workspace.service.js';
 
-const allowedMimeTypes = new Set(['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'text/markdown']);
+const allowedMimeTypes = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/markdown',
+]);
 
 type UploadedFile = {
   originalname: string;
@@ -20,7 +26,13 @@ export class DocumentService {
 
   async listForWorkspace(userId: string, workspaceId: string) {
     await this.workspaceService.ensureMembership(userId, workspaceId);
-    return this.repository.findByWorkspace(workspaceId);
+    const documents = await this.repository.findByWorkspace(workspaceId);
+    return Promise.all(
+      documents.map(async (document) => ({
+        ...document,
+        signedUrl: await createSignedStorageUrl(document.storagePath),
+      })),
+    );
   }
 
   async createFromUpload(userId: string, workspaceId: string, file: UploadedFile) {

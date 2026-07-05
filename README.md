@@ -56,18 +56,80 @@ npm test
 
 ## Environment
 
-Required for production:
+Use `.env.example` for the full local monorepo example, `apps/server/.env.example` for Render, and `apps/web/.env.example` for Vercel.
 
-- `DATABASE_URL`
-- `BETTER_AUTH_SECRET`
-- `BETTER_AUTH_URL`
-- `FRONTEND_URL`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `SUPABASE_BUCKET`
-- `GEMINI_API_KEY`
-- `GEMINI_EMBEDDING_MODEL`
-- `GEMINI_CHAT_MODEL`
+Backend variables:
+
+| Variable                    | Required in production | Purpose                                                                                          |
+| --------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `NODE_ENV`                  | Yes                    | Runtime mode. Use `production` on Render.                                                        |
+| `PORT`                      | Yes                    | HTTP port. Render injects this automatically; local default is `4000`.                           |
+| `CLIENT_URL`                | Yes                    | Public frontend origin for CORS, Better Auth trusted origins, and credentialed requests.         |
+| `DATABASE_URL`              | Yes                    | PostgreSQL connection string used by Prisma and Better Auth.                                     |
+| `BETTER_AUTH_SECRET`        | Yes                    | Better Auth signing secret. Must be at least 32 bytes.                                           |
+| `BETTER_AUTH_URL`           | Yes                    | Public backend base URL, for example the Render service URL.                                     |
+| `LOG_LEVEL`                 | No                     | Pino log level. Defaults to `info`.                                                              |
+| `SUPABASE_URL`              | Yes                    | Supabase project URL only, for example `https://project.supabase.co`; do not include `/rest/v1`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes                    | Backend-only key for Supabase Storage writes and signed URLs. Never expose to Vercel.            |
+| `SUPABASE_STORAGE_BUCKET`   | Yes                    | Storage bucket for uploaded documents. Defaults to `documents` locally.                          |
+| `GEMINI_API_KEY`            | Yes                    | Google AI Studio key for Gemini embeddings and chat.                                             |
+| `GEMINI_EMBEDDING_MODEL`    | No                     | Embedding model. Defaults to `text-embedding-004`.                                               |
+| `GEMINI_CHAT_MODEL`         | No                     | Chat model. Defaults to `gemini-2.5-flash`.                                                      |
+| `RATE_LIMIT_MAX_REQUESTS`   | No                     | Maximum requests per rate-limit window. Defaults to `120`.                                       |
+| `RATE_LIMIT_WINDOW_MS`      | No                     | Rate-limit window in milliseconds. Defaults to `60000`.                                          |
+
+Frontend variables:
+
+| Variable       | Required in production | Purpose                                       |
+| -------------- | ---------------------- | --------------------------------------------- |
+| `VITE_API_URL` | Yes                    | Public backend URL used by the Vite frontend. |
+
+The frontend intentionally uses no Supabase or Better Auth secrets.
+
+## Deployment
+
+Render backend settings:
+
+```text
+Root Directory: blank / repository root
+Build Command: npm install && npm run build --workspace=apps/server
+Start Command: npm start --workspace=apps/server
+```
+
+Run Prisma migrations against the production database before or during deployment:
+
+```bash
+npm run prisma:deploy --workspace apps/server
+```
+
+Vercel frontend settings:
+
+```text
+Root Directory: blank / repository root
+Build Command: npm install && npm run build --workspace=apps/web
+Output Directory: apps/web/dist
+```
+
+Set `VITE_API_URL` in Vercel before building. Set all backend variables only in Render.
+
+## Production Checks
+
+Before final submission:
+
+```bash
+npm install
+npm run lint
+npm run build
+npm test
+```
+
+Then verify:
+
+- `GET /health` on Render returns `{ "status": "ok", "service": "server" }`.
+- Frontend can sign up, sign in, and sign out.
+- Two workspaces cannot retrieve, cite, summarize, or tool-act on each other's documents.
+- Supabase upload and signed URL creation work for the configured bucket.
+- Gemini embeddings and chat generation succeed with the configured models.
 
 ## Notes
 

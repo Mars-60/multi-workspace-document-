@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 import { prisma } from '../lib/prisma.js';
 
 export class WorkspaceRepository {
@@ -12,7 +14,7 @@ export class WorkspaceRepository {
   }
 
   async createWorkspace(userId: string, name: string, slug: string) {
-    return prisma.$transaction(async (tx: Parameters<typeof prisma.$transaction>[0] extends (arg0: infer T) => unknown ? T : never) => {
+    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const workspace = await tx.workspace.create({
         data: {
           name,

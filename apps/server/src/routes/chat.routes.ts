@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { ChatMessage } from '@prisma/client';
 
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.middleware.js';
 import { requireWorkspaceAccess } from '../middleware/workspace.middleware.js';
@@ -38,7 +39,12 @@ router.post('/sessions/:sessionId/messages', async (req, res) => {
   const content = String(req.body?.content ?? '').trim();
 
   if (!content) {
-    res.status(400).json({ success: false, error: { code: 'BAD_REQUEST', message: 'Message content is required' } });
+    res
+      .status(400)
+      .json({
+        success: false,
+        error: { code: 'BAD_REQUEST', message: 'Message content is required' },
+      });
     return;
   }
 
@@ -53,7 +59,7 @@ router.post('/sessions/:sessionId/messages', async (req, res) => {
 
     // Load conversation history for context
     const history = await chatService.getHistory(user!.id, workspaceId!, req.params.sessionId);
-    const messages = history.map((m) => ({ role: m.role, content: m.content }));
+    const messages = history.map((m: ChatMessage) => ({ role: m.role, content: m.content }));
 
     const reply = await chatService.generateReply(workspaceId!, user!.id, messages);
 
@@ -67,12 +73,18 @@ router.post('/sessions/:sessionId/messages', async (req, res) => {
       toolEvents: reply.toolEvents,
     });
 
-    res.json({ success: true, data: { message: assistantMessage, citations: reply.citations, toolEvents: reply.toolEvents } });
+    res.json({
+      success: true,
+      data: { message: assistantMessage, citations: reply.citations, toolEvents: reply.toolEvents },
+    });
   } catch (error) {
     logger.error({ error, workspaceId, sessionId: req.params.sessionId }, 'Chat message failed');
     res.status(500).json({
       success: false,
-      error: { code: 'CHAT_FAILED', message: error instanceof Error ? error.message : 'Chat failed' },
+      error: {
+        code: 'CHAT_FAILED',
+        message: error instanceof Error ? error.message : 'Chat failed',
+      },
     });
   }
 });
@@ -87,7 +99,12 @@ router.post('/sessions/:sessionId/stream', async (req, res) => {
   const content = String(req.body?.content ?? '').trim();
 
   if (!content) {
-    res.status(400).json({ success: false, error: { code: 'BAD_REQUEST', message: 'Message content is required' } });
+    res
+      .status(400)
+      .json({
+        success: false,
+        error: { code: 'BAD_REQUEST', message: 'Message content is required' },
+      });
     return;
   }
 
@@ -117,7 +134,7 @@ router.post('/sessions/:sessionId/stream', async (req, res) => {
     });
 
     const history = await chatService.getHistory(user!.id, workspaceId!, req.params.sessionId);
-    const messages = history.map((m) => ({ role: m.role, content: m.content }));
+    const messages = history.map((m: ChatMessage) => ({ role: m.role, content: m.content }));
 
     for await (const event of chatService.streamReplyTokens(workspaceId!, user!.id, messages)) {
       if (event.type === 'citations') {

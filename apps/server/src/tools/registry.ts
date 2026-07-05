@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { DocumentChunk } from '@prisma/client';
 
 import { prisma } from '../lib/prisma.js';
 
@@ -26,7 +27,11 @@ export function listTools() {
   }));
 }
 
-export async function executeTool(name: string, input: unknown, context: { userId: string; workspaceId: string }) {
+export async function executeTool(
+  name: string,
+  input: unknown,
+  context: { userId: string; workspaceId: string },
+) {
   const tool = getTool(name);
   if (!tool) {
     await prisma.toolLog.create({
@@ -74,7 +79,10 @@ export async function executeTool(name: string, input: unknown, context: { userI
 registerTool({
   name: 'save_task',
   description: 'Persist a task in the workspace audit log.',
-  schema: z.object({ title: z.string().min(1).max(200), description: z.string().max(2000).optional() }),
+  schema: z.object({
+    title: z.string().min(1).max(200),
+    description: z.string().max(2000).optional(),
+  }),
   execute: async (input, context) => {
     const payload = input as { title: string; description?: string };
     const task = await prisma.task.create({
@@ -120,7 +128,10 @@ registerTool({
     if (!document) {
       throw new Error('Document not found');
     }
-    const summary = document.chunks.map((chunk) => chunk.content).join(' ').slice(0, 1200);
+    const summary = document.chunks
+      .map((chunk: DocumentChunk) => chunk.content)
+      .join(' ')
+      .slice(0, 1200);
     return { summarized: true, documentId: document.id, summary };
   },
 });

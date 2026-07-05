@@ -15,7 +15,7 @@ export async function uploadToStorage(path: string, buffer: Uint8Array, contentT
     throw new Error('Supabase storage is not configured');
   }
 
-  const { error } = await supabase.storage.from(env.SUPABASE_BUCKET).upload(path, buffer, {
+  const { error } = await supabase.storage.from(env.SUPABASE_STORAGE_BUCKET).upload(path, buffer, {
     contentType,
     upsert: true,
   });
@@ -25,4 +25,23 @@ export async function uploadToStorage(path: string, buffer: Uint8Array, contentT
   }
 
   return path;
+}
+
+export async function createSignedStorageUrl(path: string, expiresInSeconds = 60 * 10) {
+  if (!supabase) {
+    if (env.NODE_ENV !== 'production') {
+      return null;
+    }
+    throw new Error('Supabase storage is not configured');
+  }
+
+  const { data, error } = await supabase.storage
+    .from(env.SUPABASE_STORAGE_BUCKET)
+    .createSignedUrl(path, expiresInSeconds);
+
+  if (error) {
+    throw error;
+  }
+
+  return data.signedUrl;
 }

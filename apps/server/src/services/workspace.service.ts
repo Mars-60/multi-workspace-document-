@@ -1,11 +1,13 @@
 import { WorkspaceRepository } from '../repositories/workspace.repository.js';
 
+type WorkspaceMembership = Awaited<ReturnType<WorkspaceRepository['findUserWorkspaces']>>[number];
+
 export class WorkspaceService {
   constructor(private readonly repository = new WorkspaceRepository()) {}
 
   async listForUser(userId: string) {
     const memberships = await this.repository.findUserWorkspaces(userId);
-    return memberships.flatMap((membership) => {
+    return memberships.flatMap((membership: WorkspaceMembership) => {
       if (!membership.workspace) {
         return [];
       }
@@ -28,7 +30,11 @@ export class WorkspaceService {
       throw new Error('Workspace name is required');
     }
 
-    const baseSlug = safeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'workspace';
+    const baseSlug =
+      safeName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '') || 'workspace';
     let slug = baseSlug;
     let suffix = 1;
     while (await this.repository.findBySlug(slug)) {
