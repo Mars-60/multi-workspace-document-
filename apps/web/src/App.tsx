@@ -45,6 +45,12 @@ type RetrievedChunk = {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ─── Markdown renderer (simple) ───────────────────────────────────────────────
+function friendlyStreamError(raw: string): string {
+  if (raw.includes('429')) {
+    return 'The AI model has hit its free-tier usage limit for now (Gemini quota exceeded). Please try again in a few minutes, or later today once the daily quota resets.';
+  }
+  return `Something went wrong while generating a response: ${raw}`;
+}
 function renderMarkdown(text: string): React.ReactElement {
   const lines = text.split('\n');
   const elements: React.ReactElement[] = [];
@@ -119,6 +125,7 @@ function CitationBadge({ citation }: { citation: Citation }) {
 
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
+  const isError = !isUser && message.content.startsWith('⚠️');
   const citations = message.citations ?? [];
   const toolEvents = message.toolEvents ?? [];
 
@@ -126,7 +133,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     <div className={`flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'}`}>
       <div
         className={`max-w-[85%] rounded-lg px-4 py-3 text-sm ${
-          isUser ? 'bg-cyan-600 text-white' : 'bg-slate-800 border border-slate-700 text-slate-100'
+          isUser
+            ? 'bg-cyan-600 text-white'
+            : isError
+              ? 'bg-amber-950/40 border border-amber-700/50 text-amber-200'
+              : 'bg-slate-800 border border-slate-700 text-slate-100'
         }`}
       >
         {isUser ? <p>{message.content}</p> : renderMarkdown(message.content)}
@@ -391,7 +402,8 @@ function Home() {
       const decoder = new TextDecoder();
       let buffer = '';
       let accumulatedText = '';
-
+      let currentEvent = 'message';
+      let streamError: string | null = null;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -402,19 +414,22 @@ function Home() {
 
         for (const line of lines) {
           if (line.startsWith('event: ')) {
-            // handled by next data line
+            currentEvent = line.slice(7).trim();
           } else if (line.startsWith('data: ')) {
             try {
               const parsed = JSON.parse(line.slice(6));
-              if (parsed.text !== undefined) {
-                // token event
+
+              if (currentEvent === 'error') {
+                streamError = friendlyStreamError(
+                  typeof parsed.message === 'string' ? parsed.message : 'Unknown error',
+                );
+              } else if (currentEvent === 'token' && parsed.text !== undefined) {
                 accumulatedText += parsed.text as string;
                 setStreamingContent(accumulatedText);
-              } else if (Array.isArray(parsed)) {
-                // citations event
+              } else if (currentEvent === 'citations' && Array.isArray(parsed)) {
                 streamCitations = parsed as Citation[];
-              } else if (parsed.tool !== undefined) {
-                // tool_event
+              } else if (currentEvent === 'tool_event') {
+                // tool_event — extend here if you want to show it live
               }
             } catch {
               // ignore parse errors
@@ -425,7 +440,16 @@ function Home() {
 
       // Replace streaming content with final message from history
       setStreamingContent('');
-      await loadSessionMessages(selectedWorkspaceId, selectedSessionId);
+
+      if (streamError) {
+        // Backend didn't persist a message on error, so show it locally
+        setMessages((prev) => [
+          ...prev,
+          { id: `err-${Date.now()}`, role: 'assistant', content: `⚠️ ${streamError}` },
+        ]);
+      } else {
+        await loadSessionMessages(selectedWorkspaceId, selectedSessionId);
+      }
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
         setStatus(error instanceof Error ? error.message : 'Message failed');
