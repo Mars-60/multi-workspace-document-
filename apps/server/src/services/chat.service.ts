@@ -275,40 +275,61 @@ export class ChatService {
       },
     });
 
-    const streamResult = await chat.sendMessageStream({ message: lastUserMessage });
-
     let fullText = '';
-    for await (const chunk of streamResult) {
-      const tokenText = chunk.text;
-      if (tokenText) {
-        fullText += tokenText;
-        yield { type: 'token', data: tokenText };
-      }
+    let currentMessage:
+      string | Array<{ functionResponse: { name: string; response: Record<string, unknown> } }> =
+      lastUserMessage;
+    let iterationCount = 0;
+    const MAX_STREAM_TOOL_ITERATIONS = 5;
 
-      // Check for function calls in streamed chunks
-      const functionCalls = chunk.functionCalls;
-      if (functionCalls && functionCalls.length > 0) {
-        for (const call of functionCalls) {
-          const toolName = call.name;
-          if (!toolName) {
-            continue;
-          }
-          const toolInput = (call.args || {}) as Record<string, unknown>;
-          try {
-            const output = await executeTool(toolName, toolInput, { userId, workspaceId });
-            yield { type: 'tool_event', data: { tool: toolName, output, status: 'success' } };
-          } catch (error) {
-            yield {
-              type: 'tool_event',
-              data: {
-                tool: toolName,
-                error: error instanceof Error ? error.message : 'failed',
-                status: 'error',
-              },
-            };
+    while (iterationCount < MAX_STREAM_TOOL_ITERATIONS) {
+      iterationCount += 1;
+      const streamResult = await chat.sendMessageStream({ message: currentMessage });
+
+      let sawFunctionCall = false;
+      const functionResults: Array<{
+        functionResponse: { name: string; response: Record<string, unknown> };
+      }> = [];
+
+      for await (const chunk of streamResult) {
+        const tokenText = chunk.text;
+        if (tokenText) {
+          fullText += tokenText;
+          yield { type: 'token', data: tokenText };
+        }
+
+        const functionCalls = chunk.functionCalls;
+        if (functionCalls && functionCalls.length > 0) {
+          sawFunctionCall = true;
+          for (const call of functionCalls) {
+            const toolName = call.name;
+            if (!toolName) continue;
+            const toolInput = (call.args || {}) as Record<string, unknown>;
+
+            try {
+              const output = await executeTool(toolName, toolInput, { userId, workspaceId });
+              yield { type: 'tool_event', data: { tool: toolName, output, status: 'success' } };
+              functionResults.push({ functionResponse: { name: toolName, response: { output } } });
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Tool execution failed';
+              yield {
+                type: 'tool_event',
+                data: { tool: toolName, error: errorMessage, status: 'error' },
+              };
+              functionResults.push({
+                functionResponse: { name: toolName, response: { error: errorMessage } },
+              });
+            }
           }
         }
       }
+
+      if (sawFunctionCall) {
+        currentMessage = functionResults;
+        continue; // loop again so Gemini can respond to the tool result
+      }
+
+      break; // no function calls this round — we have the final answer
     }
 
     if (!fullText.trim()) {
