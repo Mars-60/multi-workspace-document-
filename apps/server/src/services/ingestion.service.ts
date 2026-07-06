@@ -97,8 +97,10 @@ export class IngestionService {
         'Embedding generation failed. Falling back to zero vectors.',
       );
 
-      // pgvector dimension = 16 (matches your local fallback)
-      embeddings = chunks.map(() => new Array(16).fill(0));
+      // Must match the output dimension of the embedding model (768 for
+      // gemini-embedding-001 with outputDimensionality:768). Zero vectors
+      // will rank poorly but at least won't cause a pgvector dimension mismatch.
+      embeddings = chunks.map(() => new Array(768).fill(0));
     }
 
     const document = await prisma.document.create({

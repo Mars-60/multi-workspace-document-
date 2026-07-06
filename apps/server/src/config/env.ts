@@ -132,7 +132,7 @@ const env = {
     .string()
     .trim()
     .min(1)
-    .parse(process.env.GEMINI_EMBEDDING_MODEL || 'text-embedding-004'),
+    .parse(process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001'),
   GEMINI_CHAT_MODEL: z
     .string()
     .trim()

@@ -39,12 +39,10 @@ router.post('/sessions/:sessionId/messages', async (req, res) => {
   const content = String(req.body?.content ?? '').trim();
 
   if (!content) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        error: { code: 'BAD_REQUEST', message: 'Message content is required' },
-      });
+    res.status(400).json({
+      success: false,
+      error: { code: 'BAD_REQUEST', message: 'Message content is required' },
+    });
     return;
   }
 
@@ -99,12 +97,10 @@ router.post('/sessions/:sessionId/stream', async (req, res) => {
   const content = String(req.body?.content ?? '').trim();
 
   if (!content) {
-    res
-      .status(400)
-      .json({
-        success: false,
-        error: { code: 'BAD_REQUEST', message: 'Message content is required' },
-      });
+    res.status(400).json({
+      success: false,
+      error: { code: 'BAD_REQUEST', message: 'Message content is required' },
+    });
     return;
   }
 
@@ -162,8 +158,14 @@ router.post('/sessions/:sessionId/stream', async (req, res) => {
       toolEvents: allToolEvents,
     });
   } catch (error) {
+    // Log with the full error object so Pino captures status, code, etc.
     logger.error({ error, workspaceId, sessionId: req.params.sessionId }, 'SSE stream failed');
-    sendEvent('error', { message: error instanceof Error ? error.message : 'Stream failed' });
+    // Expose a useful message over SSE — include HTTP status when the SDK gives one
+    const status = (error as Record<string, unknown>)?.status;
+    const message = error instanceof Error ? error.message : 'Stream failed';
+    sendEvent('error', {
+      message: status ? `[${status}] ${message}` : message,
+    });
   } finally {
     res.end();
   }
